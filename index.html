@@ -126,7 +126,7 @@ svg#map:active{cursor:grabbing}
 .row.birthoff .s-fill{background:var(--muted)}
 /* table */
 .tablewrap{margin-top:16px;border:1px solid var(--border);border-radius:12px;overflow:auto;
-  background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.05);max-height:72vh}
+  background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.05);max-height:72vh;overflow-anchor:none}
 table.ktable{border-collapse:collapse;width:100%;font-size:13px;min-width:820px}
 .ktable thead th{position:sticky;top:0;background:var(--card);z-index:2;text-align:left;font-weight:600;
   color:var(--muted);font-size:11px;letter-spacing:.03em;padding:9px 10px;border-bottom:2px solid var(--border);white-space:nowrap}
@@ -424,8 +424,7 @@ function showPlace(c){
     </div>`;
   box.hidden=false;
   box.querySelector('.pi-close').onclick=()=>{ box.hidden=true; };
-  fitMap();  // 키카를 고르면 지도를 전체보기로 줌아웃
-  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+  // 지도 확대/위치는 그대로 유지 (줌아웃하지 않음)
 }
 // ---------- render ----------
 function rowHtml(c){
@@ -456,12 +455,17 @@ function render(){
   document.getElementById('empty').style.display=list.length?"none":"block";
   drawCafes(list); drawHome(); updDistrictSel();
 }
-// map district click ↔ gu filter (synced with chips)
+// map district click ↔ gu filter (synced with chips). Keep the map visually fixed
+// so re-rendering the (taller/shorter) table above doesn't scroll the view away.
 function toggleGu(g){
+  const mapEl=document.querySelector('.mapwrap');
+  const before=mapEl.getBoundingClientRect().top;
   if(state.gu.has(g)) state.gu.delete(g); else state.gu.add(g);
   const pill=[...document.querySelectorAll('#guRow .pill')].find(x=>x.dataset.gu===g);
   if(pill) pill.classList.toggle('on', state.gu.has(g));
   render();
+  const after=mapEl.getBoundingClientRect().top;
+  if(after!==before) window.scrollBy(0, after-before);
 }
 
 // ---------- birth controls ----------
