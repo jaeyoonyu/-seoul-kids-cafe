@@ -91,6 +91,10 @@ svg#map:active{cursor:grabbing}
 .mapctrl button:hover{border-color:var(--accent);color:var(--accent)}
 .st-dot{fill:#8aa;fill-opacity:.55}
 .cafe-dot{fill:var(--accent);stroke:var(--card);stroke-width:2;cursor:pointer}
+.cafe-dot.sel{fill:var(--warn);stroke:var(--card);stroke-width:2.5}
+.sel-ring{fill:none;stroke:var(--warn);stroke-width:3;opacity:.9}
+@media (prefers-reduced-motion:no-preference){ .sel-ring{animation:selpulse 1.4s ease-out infinite} }
+@keyframes selpulse{0%{stroke-width:2;opacity:.9}70%{stroke-width:7;opacity:0}100%{opacity:0}}
 .home-halo{fill:var(--warn);fill-opacity:.18}
 .district{fill:var(--card);fill-opacity:.5;stroke:var(--ink);stroke-opacity:.55;stroke-width:1.8;cursor:pointer}
 .district:hover{fill:var(--accent);fill-opacity:.14}
@@ -140,6 +144,8 @@ table.ktable{border-collapse:collapse;width:100%;font-size:13px;min-width:820px}
 .ktable tbody td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
 .ktable tbody tr:last-child td{border-bottom:0}
 .ktable tbody tr:hover{background:var(--accent-soft)}
+.ktable tbody tr.selrow{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--warn)}
+.ktable tbody tr.selrow .cname{color:var(--warn)}
 .ktable tr{scroll-margin-top:12px}
 .ktable tr.flash td{animation:flashrow 1.1s ease}
 @keyframes flashrow{0%,100%{background:transparent}25%{background:var(--accent-soft)}}
@@ -196,7 +202,7 @@ td.acts{white-space:nowrap}
 
 <div class="wrap">
 <header>
-  <span class="ver">📅 <span id="verText">2026년 기준 · 업데이트 2026-07-07 15:23</span></span>
+  <span class="ver">📅 <span id="verText">2026년 기준 · 업데이트 2026-07-07 15:29</span></span>
   <h1>서울형 키즈카페 찾기</h1>
   <p class="sub">아이 출생연도로 갈 수 있는 곳만 필터 · 도식 지도 · 집에서 길찾기</p>
   <p class="sub"><span class="count" id="cnt">–</span> · 서울시 우리동네키움포털 공식 데이터 기준</p>
@@ -295,7 +301,7 @@ const YMAX = Math.max(...CAFES.map(c=>c.birth_youngest).filter(v=>v!=null));
 const DEF_LO = 2020, DEF_HI = 2023;
 const DEFAULT_GU = ['마포구','은평구','서대문구'];
 const state = {birthOn:true, lo:DEF_LO, hi:DEF_HI, type:new Set(), day:null, gu:new Set(DEFAULT_GU), q:"",
-               home:HOME_DEFAULT? {...HOME_DEFAULT}:null, sortKey:'auto', sortDir:'asc'};
+               home:HOME_DEFAULT? {...HOME_DEFAULT}:null, sortKey:'auto', sortDir:'asc', selected:null};
 
 // ---------- helpers ----------
 function haversine(a,b,c,d){const R=6371,r=Math.PI/180,dl=(c-a)*r,dn=(d-b)*r;
@@ -391,14 +397,25 @@ STATIONS.forEach(s=>{ const c=mk('circle',{cx:X(s.x),cy:Y(s.y),r:2.6,class:'st-d
   c.addEventListener('mouseenter',()=>showTip(s.n+'역',X(s.x),Y(s.y))); c.addEventListener('mouseleave',hideTip); stG.appendChild(c); });
 const cafeG=mk('g',{}); svg.appendChild(cafeG);
 const homeG=mk('g',{}); svg.appendChild(homeG);
+const selG=mk('g',{}); svg.appendChild(selG);   // selection ring (top)
 function drawCafes(list){
   cafeG.textContent="";
   list.forEach(c=>{ if(c.lat==null) return;
-    const m=mk('circle',{cx:X(c.lng),cy:Y(c.lat),r:8,class:'cafe-dot'});
-    m.addEventListener('mouseenter',()=>{m.setAttribute('r',10);showTip(c.name.replace('서울형 키즈카페 ',''),X(c.lng),Y(c.lat));});
-    m.addEventListener('mouseleave',()=>{m.setAttribute('r',8);hideTip();});
+    const sel=c.id===state.selected, r0=sel?12:8;
+    const m=mk('circle',{cx:X(c.lng),cy:Y(c.lat),r:r0,class:sel?'cafe-dot sel':'cafe-dot'});
+    m.addEventListener('mouseenter',()=>{m.setAttribute('r',r0+2);showTip(c.name.replace('서울형 키즈카페 ',''),X(c.lng),Y(c.lat));});
+    m.addEventListener('mouseleave',()=>{m.setAttribute('r',r0);hideTip();});
     m.addEventListener('click',()=>showPlace(c));
-    cafeG.appendChild(m); });
+    if(sel) m.parentNode&&cafeG.appendChild(m); // keep selected on top within layer
+    else cafeG.appendChild(m); });
+}
+function drawSel(list){
+  selG.textContent="";
+  if(!state.selected) return;
+  const c=list.find(x=>x.id===state.selected);
+  if(c && c.lat!=null){
+    selG.appendChild(mk('circle',{cx:X(c.lng),cy:Y(c.lat),r:16,class:'sel-ring'}));
+  }
 }
 function drawHome(){
   homeG.textContent="";
@@ -411,6 +428,7 @@ function drawHome(){
 
 // place info panel below the map (map click target)
 function showPlace(c){
+  state.selected=c.id; render();   // 지도 마커·표 행에 선택 강조
   const box=document.getElementById('placeInfo');
   const st=nearStations(c,3), dk=distKm(c), hc=state.home&&state.home.lat!=null;
   const days=(c.open_days||'').replace(/요일/g,'');
@@ -430,7 +448,7 @@ function showPlace(c){
       <a class="plain" href="${kakaoLoc(c)}" target="_blank" rel="noopener">지도앱</a>
     </div>`;
   box.hidden=false;
-  box.querySelector('.pi-close').onclick=()=>{ box.hidden=true; };
+  box.querySelector('.pi-close').onclick=()=>{ box.hidden=true; state.selected=null; render(); };
   // 지도 확대/위치는 그대로 유지 (줌아웃하지 않음)
 }
 // ---------- render ----------
@@ -438,7 +456,7 @@ function rowHtml(c){
   const near=nearStations(c,1), dk=distKm(c), hc=state.home&&state.home.lat!=null;
   const typeShort = c.type==="여기저기형" ? "여기저기" : "일반";
   const days=(c.open_days||'').replace(/요일/g,'')||'–';
-  return `<tr id="card-${c.id}">
+  return `<tr id="card-${c.id}"${c.id===state.selected?' class="selrow"':''}>
     <td><a class="cname" href="${detailUrl(c)}" target="_blank" rel="noopener" title="${c.addr}">${c.name.replace('서울형 키즈카페 ','')}</a></td>
     <td class="muted">${c.gu.replace(/구$/,'')}</td>
     <td class="c-type"><span class="tag type sm">${typeShort}</span></td>
@@ -459,7 +477,7 @@ function render(){
   document.getElementById('cnt').textContent=list.length+"곳 · "+lbl+(state.sortDir==='desc'?' ▼':' ▲')+" 순";
   document.getElementById('tbody').innerHTML=list.map(rowHtml).join("");
   document.getElementById('empty').style.display=list.length?"none":"block";
-  drawCafes(list); drawHome(); updDistrictSel(); updSortIndicators();
+  drawCafes(list); drawHome(); drawSel(list); updDistrictSel(); updSortIndicators();
 }
 // ---------- sorting ----------
 function effSortKey(){ return state.sortKey==='auto' ? ((state.home&&state.home.lat!=null)?'dist':'gu') : state.sortKey; }
@@ -568,7 +586,7 @@ document.getElementById('q').oninput=e=>{ state.q=e.target.value; render(); };
 document.getElementById('reset').onclick=()=>{
   state.birthOn=true; state.lo=DEF_LO; state.hi=DEF_HI; state.type.clear(); state.day=null;
   state.gu=new Set(DEFAULT_GU); state.q=""; state.home=HOME_DEFAULT?{...HOME_DEFAULT}:null;
-  state.sortKey='auto'; state.sortDir='asc';
+  state.sortKey='auto'; state.sortDir='asc'; state.selected=null;
   document.querySelectorAll('.pill.f').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('#guRow .pill').forEach(x=>x.classList.toggle('on', state.gu.has(x.dataset.gu)));
   document.getElementById('q').value=""; homeInput.value=state.home?state.home.name:"";
