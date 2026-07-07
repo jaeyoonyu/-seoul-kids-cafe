@@ -1,3 +1,10 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
 <title>서울형 키즈카페 찾기 (2026)</title>
 <style>
 :root{
@@ -84,6 +91,25 @@ svg#map{display:block;width:100%;height:auto;max-height:60vh}
 .legend b{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:4px}
 .mtip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;
   padding:3px 8px;border-radius:6px;opacity:0;transform:translate(-50%,-130%);white-space:nowrap;transition:opacity .1s;z-index:5}
+/* place info panel (map click) */
+.placeinfo{position:relative;margin-top:12px;background:var(--card);border:1px solid var(--accent);
+  border-radius:12px;padding:16px 18px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.placeinfo h3{font-family:var(--serif);font-size:19px;margin:0 0 8px;padding-right:24px}
+.pi-close{position:absolute;top:10px;right:12px;border:0;background:transparent;color:var(--muted);
+  font-size:24px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:8px}
+.pi-close:hover{color:var(--warn);background:var(--chip)}
+.pi-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.pi-kv{font-size:14px;margin:4px 0}
+.pi-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pi-links a{text-decoration:none}
+.pi-links a.go{background:var(--accent);color:#fff;padding:8px 14px;border-radius:999px;font-weight:600;font-size:14px}
+.pi-links a.go.alt{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.pi-links a.plain{padding:8px 12px;font-size:14px}
+.pi-links a.plain::after{content:" \2197";font-size:11px;opacity:.7}
+.tag.muted{background:var(--chip)}
+/* birth filter OFF state (slider greyed & nullified) */
+.row.birthoff .slider,.row.birthoff .numbox,.row.birthoff .dash{opacity:.4}
+.row.birthoff .s-fill{background:var(--muted)}
 /* table */
 .tablewrap{margin-top:16px;border:1px solid var(--border);border-radius:12px;overflow:auto;
   background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.05);max-height:72vh}
@@ -120,15 +146,29 @@ td.acts{white-space:nowrap}
 .foot{color:var(--muted);font-size:12px;margin-top:28px;border-top:1px solid var(--border);padding-top:14px}
 /* mobile */
 @media (max-width:640px){
-  .wrap{padding:16px 12px 60px}
-  header h1{font-size:24px}
-  .row .lbl{width:100%;margin-bottom:-2px}
-  .slider{max-width:none}
-  table.ktable{min-width:0;width:100%;font-size:12.5px}
-  .ktable thead th,.ktable tbody td{padding:7px 7px}
+  .wrap{padding:14px 12px 60px}
+  header h1{font-size:23px}
+  header p.sub{font-size:14px}
+  .panel{padding:13px 13px}
+  .row{gap:9px;margin:11px 0}
+  .row .lbl{width:100%;margin-bottom:-3px;font-size:12px}
+  .qrow .qbtn{flex:1;min-width:0;text-align:center;padding:11px 8px;font-size:14px}
+  .pill{padding:9px 15px;font-size:14.5px}          /* larger tap targets */
+  .slider{max-width:none;min-width:0;flex-basis:100%;height:36px}
+  .slider input[type=range]::-webkit-slider-thumb{width:28px;height:28px}
+  .numbox input{width:60px;font-size:15px}
+  .txt{padding:11px 15px;font-size:15px;flex-basis:100%}
+  table.ktable{min-width:0;width:100%;font-size:14px}
+  .ktable thead th{font-size:11.5px;padding:9px 6px}
+  .ktable tbody td{padding:11px 6px}
   .c-type,.c-days,.c-stn,.c-tel,.c-link{display:none}   /* keep: 이름·구·연령·집·길찾기 */
-  .cname{font-size:13px}
+  .cname{font-size:14.5px}
+  .tag.birth.sm{font-size:12px}
+  td.acts .go{font-size:15px;padding:5px 9px}
   .tablewrap{max-height:none}
+  svg#map{max-height:none;height:auto}
+  .placeinfo h3{font-size:18px}
+  .pi-links a.go,.pi-links a.plain{padding:10px 14px;font-size:15px}
 }
 .foot b{color:var(--ink)}
 </style>
@@ -199,8 +239,9 @@ td.acts{white-space:nowrap}
   <span><b style="background:var(--accent)"></b>키즈카페(필터됨)</span>
   <span><b style="background:#8aa;opacity:.7"></b>지하철역</span>
   <span>🏠 우리집</span>
-  <span class="s-hint">마커에 올리면 이름, 클릭하면 위 표의 해당 줄로 이동해요.</span>
+  <span class="s-hint">마커를 누르면 아래에 정보가 나와요.</span>
 </div>
+<div id="placeInfo" class="placeinfo" hidden></div>
 
 <p class="foot">
   <b>2026년 기준 스냅샷.</b> 출입연령은 <b>연나이</b>(현재연도−출생연도) 기준이라 <b>해가 바뀌면 대상 출생연도가 한 살씩 이동</b>합니다 — 내년엔 데이터를 다시 받아야 정확해요.
@@ -280,11 +321,10 @@ const homeG=mk('g',{}); svg.appendChild(homeG);
 function drawCafes(list){
   cafeG.textContent="";
   list.forEach(c=>{ if(c.lat==null) return;
-    const m=mk('circle',{cx:X(c.lng),cy:Y(c.lat),r:7,class:'cafe-dot'});
-    m.addEventListener('mouseenter',()=>{m.setAttribute('r',9);showTip(c.name.replace('서울형 키즈카페 ',''),X(c.lng),Y(c.lat));});
-    m.addEventListener('mouseleave',()=>{m.setAttribute('r',7);hideTip();});
-    m.addEventListener('click',()=>{ const el=document.getElementById('card-'+c.id);
-      if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } });
+    const m=mk('circle',{cx:X(c.lng),cy:Y(c.lat),r:8,class:'cafe-dot'});
+    m.addEventListener('mouseenter',()=>{m.setAttribute('r',10);showTip(c.name.replace('서울형 키즈카페 ',''),X(c.lng),Y(c.lat));});
+    m.addEventListener('mouseleave',()=>{m.setAttribute('r',8);hideTip();});
+    m.addEventListener('click',()=>showPlace(c));
     cafeG.appendChild(m); });
 }
 function drawHome(){
@@ -296,6 +336,30 @@ function drawHome(){
   homeG.appendChild(t);
 }
 
+// place info panel below the map (map click target)
+function showPlace(c){
+  const box=document.getElementById('placeInfo');
+  const st=nearStations(c,3), dk=distKm(c), hc=state.home&&state.home.lat!=null;
+  const days=(c.open_days||'').replace(/요일/g,'');
+  box.innerHTML=`<button class="pi-close" aria-label="닫기">×</button>
+    <h3>${c.name.replace('서울형 키즈카페 ','')}</h3>
+    <div class="pi-tags"><span class="tag type">${c.type}</span><span class="tag birth">${c.birth_oldest}~${c.birth_youngest}년생</span>
+      <span class="tag muted">연나이 ${c.age_min}~${c.age_max}세</span>${dk!=null?`<span class="tag dist">집에서 ${dk.toFixed(1)}km</span>`:''}</div>
+    <div class="pi-kv">📍 ${c.addr}</div>
+    ${days?`<div class="pi-kv">🗓 ${days}${c.closed?` · 휴관 ${c.closed}`:''}</div>`:''}
+    ${c.phone?`<div class="pi-kv">☎ <a href="tel:${c.phone}">${c.phone}</a></div>`:''}
+    ${st.length?`<div class="pi-kv">🚇 ${st.join(' · ')}</div>`:''}
+    <div class="pi-links">
+      ${hc?`<a class="go" href="${naverDir(c,'transit')}" target="_blank" rel="noopener">🚇 대중교통 길찾기</a>
+      <a class="go alt" href="${naverDir(c,'car')}" target="_blank" rel="noopener">🚗 자동차 길찾기</a>`:''}
+      <a class="plain" href="${detailUrl(c)}" target="_blank" rel="noopener">상세·운영시간</a>
+      <a class="plain" href="${resvUrl(c)}" target="_blank" rel="noopener">예약</a>
+      <a class="plain" href="${kakaoLoc(c)}" target="_blank" rel="noopener">지도앱</a>
+    </div>`;
+  box.hidden=false;
+  box.querySelector('.pi-close').onclick=()=>{ box.hidden=true; };
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
 // ---------- render ----------
 function rowHtml(c){
   const near=nearStations(c,1), dk=distKm(c), hc=state.home&&state.home.lat!=null;
@@ -334,13 +398,19 @@ const loR=document.getElementById('loR'),hiR=document.getElementById('hiR'),
 [loR,hiR].forEach(r=>{r.min=YMIN;r.max=YMAX;r.step=1;});
 [loN,hiN].forEach(n=>{n.min=YMIN;n.max=YMAX;n.step=1;});
 const pct=y=>(y-YMIN)/(YMAX-YMIN)*100;
+const birthWrap=document.getElementById('slider').closest('.row');
 function updBirthUI(){
-  loR.value=state.lo;hiR.value=state.hi;loN.value=state.lo;hiN.value=state.hi;
-  sFill.style.left=pct(state.lo)+"%"; sFill.style.width=(pct(state.hi)-pct(state.lo))+"%";
-  if(state.birthOn){ rangeLbl.className="rangeLbl";
+  const off=!state.birthOn;
+  loR.value=state.lo;hiR.value=state.hi;
+  loN.value=off?'':state.lo; hiN.value=off?'':state.hi;
+  loN.placeholder=off?'전체':''; hiN.placeholder=off?'전체':'';
+  if(off){ sFill.style.left="0%"; sFill.style.width="100%"; }
+  else { sFill.style.left=pct(state.lo)+"%"; sFill.style.width=(pct(state.hi)-pct(state.lo))+"%"; }
+  birthWrap.classList.toggle('birthoff', off);
+  if(!off){ rangeLbl.className="rangeLbl";
     rangeLbl.textContent = state.lo===state.hi ? `${state.lo}년생만 입장 가능한 곳` : `${state.lo} ~ ${state.hi}년생이 모두 입장 가능한 곳`;
     birthHint.textContent = `(연나이 ${YEAR-state.hi}~${YEAR-state.lo}세)`;
-  } else { rangeLbl.className="rangeLbl off"; rangeLbl.textContent="연령 필터 꺼짐 — 전체 표시 중"; birthHint.textContent=""; }
+  } else { rangeLbl.className="rangeLbl off"; rangeLbl.textContent="연령 필터 꺼짐 — 모든 연령 표시 중"; birthHint.textContent=""; }
 }
 function setLo(v){ v=clamp(v); if(v>state.hi)v=state.hi; state.lo=v; state.birthOn=true; render(); }
 function setHi(v){ v=clamp(v); if(v<state.lo)v=state.lo; state.hi=v; state.birthOn=true; render(); }
@@ -399,3 +469,6 @@ document.getElementById('reset').onclick=()=>{
 window.addEventListener('resize',()=>{ if(mtip.style.opacity==1) hideTip(); });
 render();
 </script>
+
+</body>
+</html>
