@@ -43,9 +43,11 @@ header p.sub{color:var(--muted);margin:2px 0;font-size:14px}
 #guRow .pill{padding:3px 8px;font-size:11px}
 .pill.ghost{background:transparent;color:var(--muted)}
 .pill.ghost:hover{color:var(--warn);border-color:var(--warn)}
-.qrow{gap:8px;padding-bottom:11px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.qbar{position:sticky;top:0;z-index:60;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;
+  padding:9px 0;margin-bottom:2px;background:var(--bg);border-bottom:1px solid transparent}
+.qbar.stuck{border-bottom-color:var(--border);box-shadow:0 3px 10px rgba(0,0,0,.10)}
 .qbtn{border:1.5px solid var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:999px;
-  padding:8px 15px;font-size:13.5px;font-weight:700;cursor:pointer;transition:.12s}
+  padding:9px 15px;font-size:13.5px;font-weight:700;cursor:pointer;transition:.12s;white-space:nowrap}
 .qbtn:hover{background:var(--accent);color:#fff}
 .qbtn.strong{background:var(--accent);color:#fff}
 .qbtn.strong:hover{filter:brightness(1.1)}
@@ -91,10 +93,8 @@ svg#map:active{cursor:grabbing}
 .mapctrl button:hover{border-color:var(--accent);color:var(--accent)}
 .st-dot{fill:#8aa;fill-opacity:.55}
 .cafe-dot{fill:var(--accent);stroke:var(--card);stroke-width:2;cursor:pointer}
-.cafe-dot.sel{fill:var(--warn);stroke:var(--card);stroke-width:2.5}
-.sel-ring{fill:none;stroke:var(--warn);stroke-width:3;opacity:.9}
-@media (prefers-reduced-motion:no-preference){ .sel-ring{animation:selpulse 1.4s ease-out infinite} }
-@keyframes selpulse{0%{stroke-width:2;opacity:.9}70%{stroke-width:7;opacity:0}100%{opacity:0}}
+.cafe-faint{fill:none;stroke:var(--accent);stroke-width:1.4;opacity:.4;pointer-events:none}
+.cafe-dot.sel{fill:var(--accent);stroke:#ff7a00;stroke-width:4}
 .home-halo{fill:var(--warn);fill-opacity:.18}
 .district{fill:var(--card);fill-opacity:.5;stroke:var(--ink);stroke-opacity:.55;stroke-width:1.8;cursor:pointer}
 .district:hover{fill:var(--accent);fill-opacity:.14}
@@ -113,6 +113,8 @@ svg#map:active{cursor:grabbing}
 .placeinfo{position:relative;margin-top:12px;background:var(--card);border:1px solid var(--accent);
   border-radius:12px;padding:16px 18px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
 .placeinfo h3{font-family:var(--serif);font-size:19px;margin:0 0 8px;padding-right:24px}
+.placeinfo h3 a{color:var(--accent);text-decoration:none}
+.placeinfo h3 a:hover{text-decoration:underline}
 .pi-close{position:absolute;top:10px;right:12px;border:0;background:transparent;color:var(--muted);
   font-size:24px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:8px}
 .pi-close:hover{color:var(--warn);background:var(--chip)}
@@ -179,7 +181,8 @@ td.acts{white-space:nowrap}
   .panel{padding:13px 13px}
   .row{gap:9px;margin:11px 0}
   .row .lbl{width:100%;margin-bottom:-3px;font-size:12px}
-  .qrow .qbtn{flex:1;min-width:0;text-align:center;padding:11px 8px;font-size:14px}
+  .qbar{gap:6px}
+  .qbar .qbtn{flex:1;text-align:center;padding:11px 6px;font-size:13.5px}
   .pill{padding:9px 15px;font-size:14.5px}          /* larger tap targets */
   .slider{max-width:none;min-width:0;flex-basis:100%;height:36px}
   .slider input[type=range]::-webkit-slider-thumb{width:28px;height:28px}
@@ -202,18 +205,19 @@ td.acts{white-space:nowrap}
 
 <div class="wrap">
 <header>
-  <span class="ver">📅 <span id="verText">2026년 기준 · 업데이트 2026-07-07 15:29</span></span>
+  <span class="ver">📅 <span id="verText">2026년 기준 · 업데이트 2026-07-07 15:39</span></span>
   <h1>서울형 키즈카페 찾기</h1>
   <p class="sub">아이 출생연도로 갈 수 있는 곳만 필터 · 도식 지도 · 집에서 길찾기</p>
   <p class="sub"><span class="count" id="cnt">–</span> · 서울시 우리동네키움포털 공식 데이터 기준</p>
 </header>
 
+<div class="qbar" role="toolbar" aria-label="빠른 필터 해제">
+  <button class="qbtn" id="clearBirth">🎂 연령전체</button>
+  <button class="qbtn" id="clearGu">📍 지역전체</button>
+  <button class="qbtn strong" id="clearAll">🔄 전체</button>
+</div>
+
 <div class="panel">
-  <div class="row qrow">
-    <button class="qbtn" id="clearBirth">🎂 연령 전체보기</button>
-    <button class="qbtn" id="clearGu">📍 지역 전체보기</button>
-    <button class="qbtn strong" id="clearAll">🔄 완전 전체보기</button>
-  </div>
   <div class="row">
     <span class="lbl">출생연도</span>
     <div class="slider" id="slider">
@@ -314,14 +318,15 @@ function birthLabel(c){ return c.birth_oldest+"~"+c.birth_youngest+"년생"; }
 function passKid(c){ if(!state.birthOn) return true;
   return c.birth_oldest!=null && c.birth_oldest<=state.lo && state.hi<=c.birth_youngest; }
 function isWeekend(c){ return /주말|토|일/.test(c.open_days||"") || c.type==="여기저기형"; }
-function passFilters(c){
+function passGu(c){ return !state.gu.size || state.gu.has(c.gu); }
+function passNonGu(c){   // everything except the district filter
   if(!passKid(c)) return false;
   if(state.type.size && !state.type.has(c.type)) return false;
   if(state.day==="weekend" && !isWeekend(c)) return false;
-  if(state.gu.size && !state.gu.has(c.gu)) return false;
   if(state.q){ const s=(c.name+" "+c.addr).toLowerCase(); if(!s.includes(state.q.toLowerCase())) return false; }
   return true;
 }
+function passFilters(c){ return passNonGu(c) && passGu(c); }
 const B="https://umppa.seoul.go.kr/icare/user/kidsCafe/";
 const detailUrl=c=>B+"BD_selectKidsCafeView.do?q_fcltyId="+c.id+"&q_fcltyStle="+c.stle;
 const resvUrl=c=>B.replace('/kidsCafe/','/kidsCafeResve/')+"BD_selectKidsCafeResveCal.do?q_fcltyId="+c.id+"&q_fcltyStle="+c.stle;
@@ -397,25 +402,19 @@ STATIONS.forEach(s=>{ const c=mk('circle',{cx:X(s.x),cy:Y(s.y),r:2.6,class:'st-d
   c.addEventListener('mouseenter',()=>showTip(s.n+'역',X(s.x),Y(s.y))); c.addEventListener('mouseleave',hideTip); stG.appendChild(c); });
 const cafeG=mk('g',{}); svg.appendChild(cafeG);
 const homeG=mk('g',{}); svg.appendChild(homeG);
-const selG=mk('g',{}); svg.appendChild(selG);   // selection ring (top)
 function drawCafes(list){
   cafeG.textContent="";
+  // 존재성 힌트: 선택 안 된 자치구의 키카는 뚫린 원으로 연하게
+  if(state.gu.size) CAFES.forEach(c=>{ if(c.lat!=null && !state.gu.has(c.gu) && passNonGu(c))
+    cafeG.appendChild(mk('circle',{cx:X(c.lng),cy:Y(c.lat),r:5,class:'cafe-faint'})); });
   list.forEach(c=>{ if(c.lat==null) return;
     const sel=c.id===state.selected, r0=sel?12:8;
     const m=mk('circle',{cx:X(c.lng),cy:Y(c.lat),r:r0,class:sel?'cafe-dot sel':'cafe-dot'});
     m.addEventListener('mouseenter',()=>{m.setAttribute('r',r0+2);showTip(c.name.replace('서울형 키즈카페 ',''),X(c.lng),Y(c.lat));});
     m.addEventListener('mouseleave',()=>{m.setAttribute('r',r0);hideTip();});
     m.addEventListener('click',()=>showPlace(c));
-    if(sel) m.parentNode&&cafeG.appendChild(m); // keep selected on top within layer
-    else cafeG.appendChild(m); });
-}
-function drawSel(list){
-  selG.textContent="";
-  if(!state.selected) return;
-  const c=list.find(x=>x.id===state.selected);
-  if(c && c.lat!=null){
-    selG.appendChild(mk('circle',{cx:X(c.lng),cy:Y(c.lat),r:16,class:'sel-ring'}));
-  }
+    cafeG.appendChild(m); });
+  const s=cafeG.querySelector('.cafe-dot.sel'); if(s) cafeG.appendChild(s); // 선택 마커 맨 위로
 }
 function drawHome(){
   homeG.textContent="";
@@ -433,7 +432,7 @@ function showPlace(c){
   const st=nearStations(c,3), dk=distKm(c), hc=state.home&&state.home.lat!=null;
   const days=(c.open_days||'').replace(/요일/g,'');
   box.innerHTML=`<button class="pi-close" aria-label="닫기">×</button>
-    <h3>${c.name.replace('서울형 키즈카페 ','')}</h3>
+    <h3><a href="${detailUrl(c)}" target="_blank" rel="noopener">${c.name.replace('서울형 키즈카페 ','')} ↗</a></h3>
     <div class="pi-tags"><span class="tag type">${c.type}</span><span class="tag birth">${c.birth_oldest}~${c.birth_youngest}년생</span>
       <span class="tag muted">연나이 ${c.age_min}~${c.age_max}세</span>${dk!=null?`<span class="tag dist">집에서 ${dk.toFixed(1)}km</span>`:''}</div>
     <div class="pi-kv">📍 ${c.addr}</div>
@@ -477,7 +476,7 @@ function render(){
   document.getElementById('cnt').textContent=list.length+"곳 · "+lbl+(state.sortDir==='desc'?' ▼':' ▲')+" 순";
   document.getElementById('tbody').innerHTML=list.map(rowHtml).join("");
   document.getElementById('empty').style.display=list.length?"none":"block";
-  drawCafes(list); drawHome(); drawSel(list); updDistrictSel(); updSortIndicators();
+  drawCafes(list); drawHome(); updDistrictSel(); updSortIndicators();
 }
 // ---------- sorting ----------
 function effSortKey(){ return state.sortKey==='auto' ? ((state.home&&state.home.lat!=null)?'dist':'gu') : state.sortKey; }
@@ -507,6 +506,7 @@ document.querySelectorAll('.ktable thead th[data-sort]').forEach(th=>th.onclick=
 function toggleGu(g){
   const mapEl=document.querySelector('.mapwrap');
   const before=mapEl.getBoundingClientRect().top;
+  state.selected=null; document.getElementById('placeInfo').hidden=true;  // 구 토글 시 키카 선택 해제
   if(state.gu.has(g)) state.gu.delete(g); else state.gu.add(g);
   const pill=[...document.querySelectorAll('#guRow .pill')].find(x=>x.dataset.gu===g);
   if(pill) pill.classList.toggle('on', state.gu.has(g));
@@ -593,6 +593,8 @@ document.getElementById('reset').onclick=()=>{
   render();
 };
 window.addEventListener('resize',()=>{ if(mtip.style.opacity==1) hideTip(); });
+const qbar=document.querySelector('.qbar');
+window.addEventListener('scroll',()=>{ qbar.classList.toggle('stuck', qbar.getBoundingClientRect().top<=0.5); },{passive:true});
 render();
 </script>
 
