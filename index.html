@@ -82,7 +82,13 @@ input,button{font-family:inherit}
 /* map */
 .mapwrap{position:relative;background:var(--mapbg);border:1px solid var(--border);border-radius:12px;
   overflow:hidden;margin-top:4px}
-svg#map{display:block;width:100%;height:auto;max-height:60vh}
+svg#map{display:block;width:100%;height:auto;max-height:60vh;touch-action:none;cursor:grab}
+svg#map:active{cursor:grabbing}
+.mapctrl{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;z-index:4}
+.mapctrl button{width:38px;height:38px;border:1px solid var(--border);background:var(--card);color:var(--ink);
+  border-radius:9px;font-size:20px;line-height:1;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.15);
+  display:flex;align-items:center;justify-content:center}
+.mapctrl button:hover{border-color:var(--accent);color:var(--accent)}
 .st-dot{fill:#8aa;fill-opacity:.55}
 .cafe-dot{fill:var(--accent);stroke:var(--card);stroke-width:2;cursor:pointer}
 .home-halo{fill:var(--warn);fill-opacity:.18}
@@ -242,12 +248,17 @@ td.acts{white-space:nowrap}
 <div class="mapwrap">
   <svg id="map" role="img" aria-label="서울형 키즈카페 위치 지도"></svg>
   <div class="mtip" id="mtip"></div>
+  <div class="mapctrl">
+    <button id="zin" aria-label="확대">＋</button>
+    <button id="zout" aria-label="축소">－</button>
+    <button id="zfit" aria-label="전체보기">⤢</button>
+  </div>
 </div>
 <div class="legend">
   <span><b style="background:var(--accent)"></b>키즈카페(필터됨)</span>
   <span><b style="background:#8aa;opacity:.7"></b>지하철역</span>
   <span>🏠 우리집</span>
-  <span class="s-hint">마커를 누르면 아래에 정보, <b>구를 누르면 그 지역 필터 켜기/끄기</b>.</span>
+  <span class="s-hint">마커를 누르면 아래에 정보가 나와요.</span>
 </div>
 <div class="linelegend" id="lineLegend"></div>
 <div id="placeInfo" class="placeinfo" hidden></div>
@@ -328,8 +339,33 @@ DISTRICTS.forEach(d=>{
 });
 function updDistrictSel(){ for(const n in distPaths) distPaths[n].classList.toggle('sel', state.gu.has(n)); }
 function showTip(txt,cx,cy){ const r=svg.getBoundingClientRect();
-  mtip.textContent=txt; mtip.style.left=(cx/W*r.width)+"px"; mtip.style.top=(cy/H*r.height)+"px"; mtip.style.opacity=1; }
+  mtip.textContent=txt; mtip.style.left=((cx-vb.x)/vb.w*r.width)+"px"; mtip.style.top=((cy-vb.y)/vb.h*r.height)+"px"; mtip.style.opacity=1; }
 function hideTip(){ mtip.style.opacity=0; }
+// ---- in-app pan & zoom (so a marker click can reset the view) ----
+let vb={x:0,y:0,w:PROJ.W,h:PROJ.H}; const MINW=PROJ.W/9;
+function applyVB(){ svg.setAttribute('viewBox',vb.x.toFixed(1)+' '+vb.y.toFixed(1)+' '+vb.w.toFixed(1)+' '+vb.h.toFixed(1)); }
+function clampVB(){ vb.w=Math.max(MINW,Math.min(PROJ.W,vb.w)); vb.h=vb.w*PROJ.H/PROJ.W;
+  vb.x=Math.max(0,Math.min(PROJ.W-vb.w,vb.x)); vb.y=Math.max(0,Math.min(PROJ.H-vb.h,vb.y)); }
+function toSvgPt(cx,cy){ const r=svg.getBoundingClientRect(); return {x:vb.x+(cx-r.left)/r.width*vb.w, y:vb.y+(cy-r.top)/r.height*vb.h}; }
+function zoomAt(px,py,f){ const nw=Math.max(MINW,Math.min(PROJ.W,vb.w/f)), nh=nw*PROJ.H/PROJ.W;
+  vb.x=px-(px-vb.x)*nw/vb.w; vb.y=py-(py-vb.y)*nh/vb.h; vb.w=nw; vb.h=nh; clampVB(); applyVB(); }
+function fitMap(){ vb={x:0,y:0,w:PROJ.W,h:PROJ.H}; applyVB(); }
+svg.addEventListener('wheel',e=>{ e.preventDefault(); const p=toSvgPt(e.clientX,e.clientY); zoomAt(p.x,p.y,e.deltaY<0?1.25:0.8); },{passive:false});
+const P=new Map(); let pinchD=0;
+svg.addEventListener('pointerdown',e=>{ P.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(P.size===2){ const a=[...P.values()]; pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y); } });
+svg.addEventListener('pointermove',e=>{ if(!P.has(e.pointerId))return; const pr=P.get(e.pointerId);
+  const dx=e.clientX-pr.x, dy=e.clientY-pr.y; P.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  const r=svg.getBoundingClientRect();
+  if(P.size===1){ vb.x-=dx/r.width*vb.w; vb.y-=dy/r.height*vb.h; clampVB(); applyVB(); }
+  else if(P.size===2){ const a=[...P.values()], nd=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
+    if(pinchD){ const m=toSvgPt((a[0].x+a[1].x)/2,(a[0].y+a[1].y)/2); zoomAt(m.x,m.y,nd/pinchD); } pinchD=nd; } });
+function pEnd(e){ P.delete(e.pointerId); if(P.size<2)pinchD=0; }
+svg.addEventListener('pointerup',pEnd); svg.addEventListener('pointercancel',pEnd);
+function ctrCoord(){ return {x:vb.x+vb.w/2, y:vb.y+vb.h/2}; }
+document.getElementById('zin').onclick=()=>{ const c=ctrCoord(); zoomAt(c.x,c.y,1.4); };
+document.getElementById('zout').onclick=()=>{ const c=ctrCoord(); zoomAt(c.x,c.y,1/1.4); };
+document.getElementById('zfit').onclick=fitMap;
 // subway line layer (color by line, below stations)
 const lineG=mk('g',{class:'lines'}); svg.appendChild(lineG);
 for(const code in LINES){ const col=LINECOLORS[code]||'#999';
@@ -388,6 +424,7 @@ function showPlace(c){
     </div>`;
   box.hidden=false;
   box.querySelector('.pi-close').onclick=()=>{ box.hidden=true; };
+  fitMap();  // 키카를 고르면 지도를 전체보기로 줌아웃
   box.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 // ---------- render ----------
