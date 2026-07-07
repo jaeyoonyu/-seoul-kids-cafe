@@ -130,6 +130,13 @@ svg#map:active{cursor:grabbing}
 table.ktable{border-collapse:collapse;width:100%;font-size:13px;min-width:820px}
 .ktable thead th{position:sticky;top:0;background:var(--card);z-index:2;text-align:left;font-weight:600;
   color:var(--muted);font-size:11px;letter-spacing:.03em;padding:9px 10px;border-bottom:2px solid var(--border);white-space:nowrap}
+.ktable thead th[data-sort]{cursor:pointer;user-select:none}
+.ktable thead th[data-sort]:hover{color:var(--accent)}
+.ktable thead th[data-sort]::after{content:"⇅";opacity:.35;margin-left:3px;font-size:10px}
+.ktable thead th.sorted-asc{color:var(--accent)}
+.ktable thead th.sorted-desc{color:var(--accent)}
+.ktable thead th.sorted-asc::after{content:"▲";opacity:.95}
+.ktable thead th.sorted-desc::after{content:"▼";opacity:.95}
 .ktable tbody td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
 .ktable tbody tr:last-child td{border-bottom:0}
 .ktable tbody tr:hover{background:var(--accent-soft)}
@@ -236,7 +243,8 @@ td.acts{white-space:nowrap}
 <div class="tablewrap">
   <table class="ktable">
     <thead><tr>
-      <th>키즈카페</th><th>구</th><th class="c-type">유형</th><th>출입연령</th><th class="num">집에서</th>
+      <th data-sort="name">키즈카페</th><th data-sort="gu">구</th><th class="c-type">유형</th>
+      <th data-sort="birth">출입연령</th><th class="num" data-sort="dist">집에서</th>
       <th class="c-days">운영</th><th class="c-stn">가까운 역</th><th class="c-tel">전화</th><th>길찾기</th><th class="c-link">바로가기</th>
     </tr></thead>
     <tbody id="tbody"></tbody>
@@ -288,7 +296,7 @@ const YMAX = Math.max(...CAFES.map(c=>c.birth_youngest).filter(v=>v!=null));
 const DEF_LO = 2020, DEF_HI = 2023;
 const DEFAULT_GU = ['마포구','은평구','서대문구'];
 const state = {birthOn:true, lo:DEF_LO, hi:DEF_HI, type:new Set(), day:null, gu:new Set(DEFAULT_GU), q:"",
-               home:HOME_DEFAULT? {...HOME_DEFAULT}:null};
+               home:HOME_DEFAULT? {...HOME_DEFAULT}:null, sortKey:'auto', sortDir:'asc'};
 
 // ---------- helpers ----------
 function haversine(a,b,c,d){const R=6371,r=Math.PI/180,dl=(c-a)*r,dn=(d-b)*r;
@@ -447,14 +455,36 @@ function rowHtml(c){
 function render(){
   updBirthUI();
   const hasHomeCoords = state.home && state.home.lat!=null;
-  let list=CAFES.filter(passFilters);
-  if(hasHomeCoords) list=list.slice().sort((a,b)=>(distKm(a)??9e9)-(distKm(b)??9e9));
-  else list=list.slice().sort((a,b)=>a.gu.localeCompare(b.gu,'ko')||a.name.localeCompare(b.name,'ko'));
-  document.getElementById('cnt').textContent=list.length+"곳"+(hasHomeCoords?" · 집에서 가까운 순":"");
+  let list=CAFES.filter(passFilters).slice().sort(cmp);
+  const ek=effSortKey(), lbl={dist:'집에서 가까운',gu:'자치구',name:'이름',birth:'출입연령'}[ek];
+  document.getElementById('cnt').textContent=list.length+"곳 · "+lbl+(state.sortDir==='desc'?' ▼':' ▲')+" 순";
   document.getElementById('tbody').innerHTML=list.map(rowHtml).join("");
   document.getElementById('empty').style.display=list.length?"none":"block";
-  drawCafes(list); drawHome(); updDistrictSel();
+  drawCafes(list); drawHome(); updDistrictSel(); updSortIndicators();
 }
+// ---------- sorting ----------
+function effSortKey(){ return state.sortKey==='auto' ? ((state.home&&state.home.lat!=null)?'dist':'gu') : state.sortKey; }
+function cmp(a,b){
+  const k=effSortKey(); let r=0;
+  if(k==='dist'){ r=(distKm(a)??Infinity)-(distKm(b)??Infinity) || a.gu.localeCompare(b.gu,'ko'); }
+  else if(k==='gu'){ r=a.gu.localeCompare(b.gu,'ko') || a.name.localeCompare(b.name,'ko'); }
+  else if(k==='name'){ r=a.name.localeCompare(b.name,'ko'); }
+  else if(k==='birth'){ r=(a.birth_oldest-b.birth_oldest) || (a.birth_youngest-b.birth_youngest) || a.name.localeCompare(b.name,'ko'); }
+  return state.sortDir==='desc' ? -r : r;
+}
+function updSortIndicators(){
+  const ek=effSortKey();
+  document.querySelectorAll('.ktable thead th[data-sort]').forEach(th=>{
+    th.classList.remove('sorted-asc','sorted-desc');
+    if(th.dataset.sort===ek) th.classList.add(state.sortDir==='asc'?'sorted-asc':'sorted-desc');
+  });
+}
+document.querySelectorAll('.ktable thead th[data-sort]').forEach(th=>th.onclick=()=>{
+  const k=th.dataset.sort;
+  if(effSortKey()===k){ state.sortDir = state.sortDir==='asc'?'desc':'asc'; }
+  else { state.sortKey=k; state.sortDir='asc'; }
+  render();
+});
 // map district click ↔ gu filter (synced with chips). Keep the map visually fixed
 // so re-rendering the (taller/shorter) table above doesn't scroll the view away.
 function toggleGu(g){
@@ -539,6 +569,7 @@ document.getElementById('q').oninput=e=>{ state.q=e.target.value; render(); };
 document.getElementById('reset').onclick=()=>{
   state.birthOn=true; state.lo=DEF_LO; state.hi=DEF_HI; state.type.clear(); state.day=null;
   state.gu=new Set(DEFAULT_GU); state.q=""; state.home=HOME_DEFAULT?{...HOME_DEFAULT}:null;
+  state.sortKey='auto'; state.sortDir='asc';
   document.querySelectorAll('.pill.f').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('#guRow .pill').forEach(x=>x.classList.toggle('on', state.gu.has(x.dataset.gu)));
   document.getElementById('q').value=""; homeInput.value=state.home?state.home.name:"";
