@@ -40,6 +40,7 @@ header p.sub{color:var(--muted);margin:2px 0;font-size:14px}
   padding:6px 13px;font-size:13.5px;cursor:pointer;user-select:none;transition:.12s}
 .pill:hover{border-color:var(--accent)}
 .pill.on{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
+#guRow .pill{padding:4px 10px;font-size:12.5px}
 .pill.ghost{background:transparent;color:var(--muted)}
 .pill.ghost:hover{color:var(--warn);border-color:var(--warn)}
 .qrow{gap:8px;padding-bottom:11px;border-bottom:1px solid var(--border);margin-bottom:4px}
@@ -85,9 +86,12 @@ svg#map{display:block;width:100%;height:auto;max-height:60vh}
 .st-dot{fill:#8aa;fill-opacity:.55}
 .cafe-dot{fill:var(--accent);stroke:var(--card);stroke-width:2;cursor:pointer}
 .home-halo{fill:var(--warn);fill-opacity:.18}
-.district{fill:var(--card);fill-opacity:.5;stroke:var(--muted);stroke-opacity:.85;stroke-width:1.6}
+.district{fill:var(--card);fill-opacity:.5;stroke:var(--ink);stroke-opacity:.55;stroke-width:1.8;cursor:pointer}
+.district:hover{fill:var(--accent);fill-opacity:.14}
+.district.sel{fill:var(--accent);fill-opacity:.24;stroke:var(--accent);stroke-opacity:1;stroke-width:2.4}
 .district-label{fill:var(--ink);font-family:var(--sans);font-size:16px;font-weight:700;opacity:.95;
   pointer-events:none;paint-order:stroke;stroke:var(--card);stroke-width:3px;stroke-linejoin:round}
+#map g.lines{pointer-events:none}
 .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted);margin:8px 2px 0}
 .legend b{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:4px}
 .linelegend{display:flex;flex-wrap:wrap;gap:9px;margin:7px 2px 0}
@@ -243,7 +247,7 @@ td.acts{white-space:nowrap}
   <span><b style="background:var(--accent)"></b>키즈카페(필터됨)</span>
   <span><b style="background:#8aa;opacity:.7"></b>지하철역</span>
   <span>🏠 우리집</span>
-  <span class="s-hint">마커를 누르면 아래에 정보가 나와요.</span>
+  <span class="s-hint">마커를 누르면 아래에 정보, <b>구를 누르면 그 지역 필터 켜기/끄기</b>.</span>
 </div>
 <div class="linelegend" id="lineLegend"></div>
 <div id="placeInfo" class="placeinfo" hidden></div>
@@ -312,18 +316,22 @@ const {latMin,latMax,lngMin,lngMax,W,H}=PROJ;
 svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
 const X=lng=>(lng-lngMin)/(lngMax-lngMin)*W, Y=lat=>(latMax-lat)/(latMax-latMin)*H;
 function mk(tag,attrs){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
-// district background (embedded Seoul boundaries)
+// district background (embedded Seoul boundaries) — clickable to toggle gu filter
 const distG=mk('g',{}); svg.appendChild(distG);
+const distPaths={};
 DISTRICTS.forEach(d=>{
-  distG.appendChild(mk('path',{d:d.d,class:'district'}));
+  const p=mk('path',{d:d.d,class:'district'});
+  p.addEventListener('click',()=>toggleGu(d.n));
+  distPaths[d.n]=p; distG.appendChild(p);
   const t=mk('text',{x:d.cx,y:d.cy,class:'district-label','text-anchor':'middle'});
   t.textContent=d.n.replace(/구$/,''); distG.appendChild(t);
 });
+function updDistrictSel(){ for(const n in distPaths) distPaths[n].classList.toggle('sel', state.gu.has(n)); }
 function showTip(txt,cx,cy){ const r=svg.getBoundingClientRect();
   mtip.textContent=txt; mtip.style.left=(cx/W*r.width)+"px"; mtip.style.top=(cy/H*r.height)+"px"; mtip.style.opacity=1; }
 function hideTip(){ mtip.style.opacity=0; }
 // subway line layer (color by line, below stations)
-const lineG=mk('g',{}); svg.appendChild(lineG);
+const lineG=mk('g',{class:'lines'}); svg.appendChild(lineG);
 for(const code in LINES){ const col=LINECOLORS[code]||'#999';
   LINES[code].forEach(s=>lineG.appendChild(mk('line',{x1:s[0],y1:s[1],x2:s[2],y2:s[3],
     stroke:col,'stroke-width':3,'stroke-opacity':.3,'stroke-linecap':'round'})));
@@ -409,7 +417,14 @@ function render(){
   document.getElementById('cnt').textContent=list.length+"곳"+(hasHomeCoords?" · 집에서 가까운 순":"");
   document.getElementById('tbody').innerHTML=list.map(rowHtml).join("");
   document.getElementById('empty').style.display=list.length?"none":"block";
-  drawCafes(list); drawHome();
+  drawCafes(list); drawHome(); updDistrictSel();
+}
+// map district click ↔ gu filter (synced with chips)
+function toggleGu(g){
+  if(state.gu.has(g)) state.gu.delete(g); else state.gu.add(g);
+  const pill=[...document.querySelectorAll('#guRow .pill')].find(x=>x.dataset.gu===g);
+  if(pill) pill.classList.toggle('on', state.gu.has(g));
+  render();
 }
 
 // ---------- birth controls ----------
@@ -460,7 +475,7 @@ document.querySelectorAll('.pill.f').forEach(p=>p.onclick=()=>{
 });
 const gus=[...new Set(CAFES.map(c=>c.gu))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'ko'));
 const guRow=document.getElementById('guRow');
-gus.forEach(g=>{ const el=document.createElement('span'); el.className='pill'; el.textContent=g; el.dataset.gu=g;
+gus.forEach(g=>{ const el=document.createElement('span'); el.className='pill'; el.textContent=g.replace(/구$/,''); el.dataset.gu=g;
   if(state.gu.has(g)) el.classList.add('on');
   el.onclick=()=>{ toggleSet(state.gu,g); el.classList.toggle('on'); render(); }; guRow.appendChild(el); });
 // station datalist
