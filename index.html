@@ -35,6 +35,12 @@ header p.sub{color:var(--muted);margin:2px 0;font-size:14px}
 .pill.on{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
 .pill.ghost{background:transparent;color:var(--muted)}
 .pill.ghost:hover{color:var(--warn);border-color:var(--warn)}
+.qrow{gap:8px;padding-bottom:11px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.qbtn{border:1.5px solid var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:999px;
+  padding:8px 15px;font-size:13.5px;font-weight:700;cursor:pointer;transition:.12s}
+.qbtn:hover{background:var(--accent);color:#fff}
+.qbtn.strong{background:var(--accent);color:#fff}
+.qbtn.strong:hover{filter:brightness(1.1)}
 input,button{font-family:inherit}
 .txt{border:1px solid var(--border);background:var(--bg);color:var(--ink);border-radius:999px;
   padding:9px 15px;font-size:14px}
@@ -136,6 +142,11 @@ td.acts{white-space:nowrap}
 </header>
 
 <div class="panel">
+  <div class="row qrow">
+    <button class="qbtn" id="clearBirth">🎂 연령 전체보기</button>
+    <button class="qbtn" id="clearGu">📍 지역 전체보기</button>
+    <button class="qbtn strong" id="clearAll">🔄 완전 전체보기</button>
+  </div>
   <div class="row">
     <span class="lbl">출생연도</span>
     <div class="slider" id="slider">
@@ -145,7 +156,6 @@ td.acts{white-space:nowrap}
     <span class="numbox"><input type="number" id="loN" class="tnum" aria-label="출생연도 최소"><span class="u">년</span></span>
     <span class="dash">~</span>
     <span class="numbox"><input type="number" id="hiN" class="tnum" aria-label="출생연도 최대"><span class="u">년생</span></span>
-    <span class="pill ghost" id="birthClear">연령 필터 해제</span>
   </div>
   <div class="row"><span class="lbl"></span><span class="rangeLbl" id="rangeLbl"></span>
     <span class="s-hint" id="birthHint"></span></div>
@@ -339,7 +349,14 @@ loR.addEventListener('input',()=>setLo(loR.value));
 hiR.addEventListener('input',()=>setHi(hiR.value));
 loN.addEventListener('change',()=>setLo(loN.value));
 hiN.addEventListener('change',()=>setHi(hiN.value));
-document.getElementById('birthClear').onclick=()=>{ state.birthOn=false; render(); };
+function clearGuPills(){ document.querySelectorAll('#guRow .pill').forEach(x=>x.classList.remove('on')); }
+document.getElementById('clearBirth').onclick=()=>{ state.birthOn=false; render(); };
+document.getElementById('clearGu').onclick=()=>{ state.gu.clear(); clearGuPills(); render(); };
+document.getElementById('clearAll').onclick=()=>{
+  state.birthOn=false; state.type.clear(); state.day=null; state.gu.clear(); state.q="";
+  document.querySelectorAll('.pill.f').forEach(x=>x.classList.remove('on')); clearGuPills();
+  document.getElementById('q').value=""; render();
+};
 
 // ---------- other controls ----------
 function toggleSet(s,v){ s.has(v)?s.delete(v):s.add(v); }
