@@ -85,8 +85,9 @@ svg#map{display:block;width:100%;height:auto;max-height:60vh}
 .st-dot{fill:#8aa;fill-opacity:.55}
 .cafe-dot{fill:var(--accent);stroke:var(--card);stroke-width:2;cursor:pointer}
 .home-halo{fill:var(--warn);fill-opacity:.18}
-.district{fill:var(--card);fill-opacity:.5;stroke:var(--muted);stroke-opacity:.4;stroke-width:1.2}
-.district-label{fill:var(--muted);font-family:var(--sans);font-size:15px;opacity:.72;pointer-events:none}
+.district{fill:var(--card);fill-opacity:.5;stroke:var(--muted);stroke-opacity:.85;stroke-width:1.6}
+.district-label{fill:var(--ink);font-family:var(--sans);font-size:16px;font-weight:700;opacity:.95;
+  pointer-events:none;paint-order:stroke;stroke:var(--card);stroke-width:3px;stroke-linejoin:round}
 .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted);margin:8px 2px 0}
 .legend b{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:4px}
 .linelegend{display:flex;flex-wrap:wrap;gap:9px;margin:7px 2px 0}
@@ -325,7 +326,7 @@ function hideTip(){ mtip.style.opacity=0; }
 const lineG=mk('g',{}); svg.appendChild(lineG);
 for(const code in LINES){ const col=LINECOLORS[code]||'#999';
   LINES[code].forEach(s=>lineG.appendChild(mk('line',{x1:s[0],y1:s[1],x2:s[2],y2:s[3],
-    stroke:col,'stroke-width':3,'stroke-opacity':.8,'stroke-linecap':'round'})));
+    stroke:col,'stroke-width':3,'stroke-opacity':.3,'stroke-linecap':'round'})));
 }
 (function(){ const ll=document.getElementById('lineLegend'); if(!ll) return;
   ['1','2','3','4','5','6','7','8','9'].forEach(n=>{ const s=document.createElement('span');
